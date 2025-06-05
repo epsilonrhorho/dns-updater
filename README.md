@@ -8,6 +8,7 @@
 - `RECORD_NAME` – the fully qualified DNS record name to update.
 - `AWS_ACCESS_KEY_ID` – your AWS access key ID used to authenticate with Route53.
 - `AWS_SECRET_ACCESS_KEY` – your AWS secret access key.
+- `STORAGE_PATH` – path to persist the last seen IP address between runs.
 
 ## IAM policy requirements
 

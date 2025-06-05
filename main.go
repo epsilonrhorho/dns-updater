@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/kelseyhightower/envconfig"
 
@@ -20,6 +22,7 @@ type Config struct {
 	RecordName   string `envconfig:"RECORD_NAME" required:"true"`
 	AccessKeyID  string `envconfig:"AWS_ACCESS_KEY_ID" required:"true"`
 	SecretKey    string `envconfig:"AWS_SECRET_ACCESS_KEY" required:"true"`
+	StoragePath  string `envconfig:"STORAGE_PATH" required:"true"`
 }
 
 func main() {
@@ -34,6 +37,17 @@ func main() {
 		log.Fatalf("failed to get IP: %v", err)
 	}
 	log.Println("Public IP:", ip)
+
+	prevData, err := os.ReadFile(c.StoragePath)
+	if err != nil && !os.IsNotExist(err) {
+		log.Fatalf("failed to read storage path: %v", err)
+	}
+	lastIP := strings.TrimSpace(string(prevData))
+
+	if lastIP == ip {
+		log.Println("IP unchanged; skipping Route53 update")
+		return
+	}
 
 	cfg, err := config.LoadDefaultConfig(
 		context.Background(),
@@ -65,6 +79,10 @@ func main() {
 	})
 	if err != nil {
 		log.Fatalf("failed to update Route53 record: %v", err)
+	}
+
+	if err := os.WriteFile(c.StoragePath, []byte(ip), 0600); err != nil {
+		log.Fatalf("failed to write storage file: %v", err)
 	}
 
 	log.Println("Route53 A record updated")
