@@ -31,3 +31,24 @@ The AWS credentials used must permit `ChangeResourceRecordSets` on the hosted zo
 ```
 
 Replace `<HOSTED_ZONE_ID>` with your zone ID. The user or role must also have permission to retrieve changes if desired, e.g. `route53:GetChange`.
+
+## Kubernetes deployment
+
+The manifests in `k8s/` run `dns-updater` as a CronJob every two minutes.
+Create a secret containing your AWS credentials before applying them:
+
+```bash
+kubectl create secret generic dns-updater-aws \
+  --from-literal=AWS_ACCESS_KEY_ID=<your-key-id> \
+  --from-literal=AWS_SECRET_ACCESS_KEY=<your-secret-key>
+```
+
+Then create the PersistentVolumeClaim and CronJob:
+
+```bash
+kubectl apply -f k8s/pvc.yaml
+kubectl apply -f k8s/cronjob.yaml
+```
+
+Edit `k8s/cronjob.yaml` to fill in your `HOSTED_ZONE_ID` and `RECORD_NAME` values and
+to use the image you have pushed to a registry.
