@@ -1,11 +1,13 @@
 # dns-updater
 
-`dns-updater` retrieves the machine's public IP address and updates the Route53 A record for `raspberrypi.epsilonrhorho.club`.
+`dns-updater` retrieves the machine's public IP address and updates a Route53 A record. The specific record to update is supplied via an environment variable so the program can be used for any host name.
 
 ## Required environment variables
 
 - `HOSTED_ZONE_ID` – the ID of the Route53 hosted zone containing the record.
-- AWS credentials and region variables recognised by the AWS SDK such as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION` must also be configured so the program can authenticate with Route53.
+- `RECORD_NAME` – the fully qualified DNS record name to update.
+- `AWS_ACCESS_KEY_ID` – your AWS access key ID used to authenticate with Route53.
+- `AWS_SECRET_ACCESS_KEY` – your AWS secret access key.
 
 ## IAM policy requirements
 
