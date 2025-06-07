@@ -34,7 +34,6 @@ func update(ctx context.Context, r53 *route53.Client, ipClient ipify.ClientInter
 	if err != nil {
 		return err
 	}
-	log.Println("Public IP:", ip)
 
 	prevData, err := os.ReadFile(c.StoragePath)
 	if err != nil && !os.IsNotExist(err) {
@@ -43,7 +42,6 @@ func update(ctx context.Context, r53 *route53.Client, ipClient ipify.ClientInter
 	lastIP := strings.TrimSpace(string(prevData))
 
 	if lastIP == ip {
-		log.Println("IP unchanged; skipping Route53 update")
 		return nil
 	}
 
@@ -71,7 +69,7 @@ func update(ctx context.Context, r53 *route53.Client, ipClient ipify.ClientInter
 		return err
 	}
 
-	log.Println("Route53 A record updated")
+	log.Printf("Address of %s was updated to %s", c.RecordName, ip)
 	return nil
 }
 
