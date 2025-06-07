@@ -22,6 +22,8 @@ spec:
           value: "<RECORD_NAME>"
         - name: STORAGE_PATH
           value: /data/last_ip
+        - name: AWS_REGION
+          value: "<AWS_REGION>"
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:

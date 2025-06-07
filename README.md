@@ -8,6 +8,7 @@
 - `RECORD_NAME` – the fully qualified DNS record name to update.
 - `AWS_ACCESS_KEY_ID` – your AWS access key ID used to authenticate with Route53.
 - `AWS_SECRET_ACCESS_KEY` – your AWS secret access key.
+- `AWS_REGION` – the AWS region to use when signing requests.
 - `STORAGE_PATH` – path to persist the last seen IP address between runs.
 
 ## IAM policy requirements
@@ -51,5 +52,5 @@ kubectl apply -f k8s/pvc.yaml
 kubectl apply -f k8s/deployment.yaml
 ```
 
-Edit `k8s/deployment.yaml` to fill in your `HOSTED_ZONE_ID` and `RECORD_NAME`
-values and to use the image you have pushed to a registry.
+Edit `k8s/deployment.yaml` to fill in your `HOSTED_ZONE_ID`, `RECORD_NAME` and
+`AWS_REGION` values and to use the image you have pushed to a registry.
