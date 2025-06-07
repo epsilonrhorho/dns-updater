@@ -25,6 +25,7 @@ type Config struct {
 	RecordName   string `envconfig:"RECORD_NAME" required:"true"`
 	AccessKeyID  string `envconfig:"AWS_ACCESS_KEY_ID" required:"true"`
 	SecretKey    string `envconfig:"AWS_SECRET_ACCESS_KEY" required:"true"`
+	Region       string `envconfig:"AWS_REGION" required:"true"`
 	StoragePath  string `envconfig:"STORAGE_PATH" required:"true"`
 }
 
@@ -81,6 +82,7 @@ func main() {
 	}
 	cfg, err := config.LoadDefaultConfig(
 		context.Background(),
+		config.WithRegion(c.Region),
 		config.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(c.AccessKeyID, c.SecretKey, ""),
 		),
