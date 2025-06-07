@@ -55,7 +55,7 @@ func update(ctx context.Context, r53 *route53.Client, ipClient ipify.ClientInter
 					ResourceRecordSet: &types.ResourceRecordSet{
 						Name:            aws.String(c.RecordName),
 						Type:            types.RRTypeA,
-						TTL:             aws.Int64(300),
+						TTL:             aws.Int64(60),
 						ResourceRecords: []types.ResourceRecord{{Value: aws.String(ip)}},
 					},
 				},
