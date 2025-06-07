@@ -34,7 +34,8 @@ Replace `<HOSTED_ZONE_ID>` with your zone ID. The user or role must also have pe
 
 ## Kubernetes deployment
 
-The manifests in `k8s/` run `dns-updater` as a CronJob every two minutes.
+The manifests in `k8s/` run `dns-updater` continuously. The application now
+handles its own scheduling and updates the DNS record every two minutes.
 Create a secret containing your AWS credentials before applying them:
 
 ```bash
@@ -43,12 +44,12 @@ kubectl create secret generic dns-updater-aws \
   --from-literal=AWS_SECRET_ACCESS_KEY=<your-secret-key>
 ```
 
-Then create the PersistentVolumeClaim and CronJob:
+Then create the PersistentVolumeClaim and Deployment:
 
 ```bash
 kubectl apply -f k8s/pvc.yaml
-kubectl apply -f k8s/cronjob.yaml
+kubectl apply -f k8s/deployment.yaml
 ```
 
-Edit `k8s/cronjob.yaml` to fill in your `HOSTED_ZONE_ID` and `RECORD_NAME` values and
-to use the image you have pushed to a registry.
+Edit `k8s/deployment.yaml` to fill in your `HOSTED_ZONE_ID` and `RECORD_NAME`
+values and to use the image you have pushed to a registry.
