@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"github.com/epsilonrhorho/dns-updater/ipify"
@@ -52,6 +53,9 @@ func (s *Service) getCurrentIP(ctx context.Context) (string, error) {
 func (s *Service) hasIPChanged(currentIP string) (bool, error) {
 	lastIP, err := s.storage.ReadLastIP()
 	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
 		return false, err
 	}
 	return lastIP != currentIP, nil
