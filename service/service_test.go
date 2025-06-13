@@ -13,10 +13,10 @@ func TestService_Update(t *testing.T) {
 		currentIPError      error
 		lastIP              string
 		lastIPError         error
-		route53Error        error
+		dnsError            error
 		storageWriteError   error
 		expectError         bool
-		expectRoute53Called bool
+		expectDNSCalled     bool
 		expectStorageCalled bool
 	}{
 		{
@@ -24,7 +24,7 @@ func TestService_Update(t *testing.T) {
 			currentIP:           "192.168.1.2",
 			lastIP:              "192.168.1.1",
 			expectError:         false,
-			expectRoute53Called: true,
+			expectDNSCalled:     true,
 			expectStorageCalled: true,
 		},
 		{
@@ -32,7 +32,7 @@ func TestService_Update(t *testing.T) {
 			currentIP:           "192.168.1.1",
 			lastIP:              "192.168.1.1",
 			expectError:         false,
-			expectRoute53Called: false,
+			expectDNSCalled:     false,
 			expectStorageCalled: false,
 		},
 		{
@@ -40,7 +40,7 @@ func TestService_Update(t *testing.T) {
 			currentIP:           "192.168.1.1",
 			lastIP:              "",
 			expectError:         false,
-			expectRoute53Called: true,
+			expectDNSCalled:     true,
 			expectStorageCalled: true,
 		},
 		{
@@ -55,12 +55,12 @@ func TestService_Update(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:                "error updating Route53",
-			currentIP:           "192.168.1.2",
-			lastIP:              "192.168.1.1",
-			route53Error:        errRoute53,
-			expectError:         true,
-			expectRoute53Called: true,
+			name:            "error updating DNS",
+			currentIP:       "192.168.1.2",
+			lastIP:          "192.168.1.1",
+			dnsError:        errDNS,
+			expectError:     true,
+			expectDNSCalled: true,
 		},
 		{
 			name:                "error writing to storage",
@@ -68,19 +68,19 @@ func TestService_Update(t *testing.T) {
 			lastIP:              "192.168.1.1",
 			storageWriteError:   errStorage,
 			expectError:         true,
-			expectRoute53Called: true,
+			expectDNSCalled:     true,
 			expectStorageCalled: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var route53Called, storageCalled bool
+			var dnsProviderCalled, storageCalled bool
 
-			mockRoute53 := &mockRoute53Client{
-				updateARecordFunc: func(ctx context.Context, hostedZoneID, recordName, ip string, ttl int64) error {
-					route53Called = true
-					return tt.route53Error
+			mockDNS := &mockDNSProvider{
+				updateARecordFunc: func(ctx context.Context, zone, name, ip string, ttl time.Duration) error {
+					dnsProviderCalled = true
+					return tt.dnsError
 				},
 			}
 
@@ -101,12 +101,12 @@ func TestService_Update(t *testing.T) {
 			}
 
 			config := Config{
-				HostedZoneID: "Z123456789",
-				RecordName:   "example.com",
-				TTL:          60,
+				Zone:       "example.com",
+				RecordName: "home",
+				TTL:        60 * time.Second,
 			}
 
-			service := New(mockRoute53, mockIP, mockStore, config, time.Minute)
+			service := New(mockDNS, mockIP, mockStore, config, time.Minute)
 			err := service.Update(context.Background())
 
 			if tt.expectError && err == nil {
@@ -116,8 +116,8 @@ func TestService_Update(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			if route53Called != tt.expectRoute53Called {
-				t.Errorf("expected Route53 called: %v, got: %v", tt.expectRoute53Called, route53Called)
+			if dnsProviderCalled != tt.expectDNSCalled {
+				t.Errorf("expected DNS called: %v, got: %v", tt.expectDNSCalled, dnsProviderCalled)
 			}
 			if storageCalled != tt.expectStorageCalled {
 				t.Errorf("expected storage called: %v, got: %v", tt.expectStorageCalled, storageCalled)
@@ -232,10 +232,10 @@ func TestService_hasIPChanged(t *testing.T) {
 
 func TestService_updateDNSRecord(t *testing.T) {
 	tests := []struct {
-		name         string
-		ip           string
-		route53Error error
-		expectError  bool
+		name        string
+		ip          string
+		dnsError    error
+		expectError bool
 	}{
 		{
 			name:        "successful DNS update",
@@ -243,32 +243,32 @@ func TestService_updateDNSRecord(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:         "DNS update error",
-			ip:           "192.168.1.1",
-			route53Error: errRoute53,
-			expectError:  true,
+			name:        "DNS update error",
+			ip:          "192.168.1.1",
+			dnsError:    errDNS,
+			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var capturedParams []interface{}
-			mockRoute53 := &mockRoute53Client{
-				updateARecordFunc: func(ctx context.Context, hostedZoneID, recordName, ip string, ttl int64) error {
-					capturedParams = []interface{}{hostedZoneID, recordName, ip, ttl}
-					return tt.route53Error
+			mockDNS := &mockDNSProvider{
+				updateARecordFunc: func(ctx context.Context, zone, name, ip string, ttl time.Duration) error {
+					capturedParams = []interface{}{zone, name, ip, ttl}
+					return tt.dnsError
 				},
 			}
 
 			config := Config{
-				HostedZoneID: "Z123456789",
-				RecordName:   "example.com",
-				TTL:          300,
+				Zone:       "example.com",
+				RecordName: "home",
+				TTL:        300 * time.Second,
 			}
 
 			service := &Service{
-				route53Client: mockRoute53,
-				config:        config,
+				dnsProvider: mockDNS,
+				config:      config,
 			}
 
 			err := service.updateDNSRecord(context.Background(), tt.ip)
@@ -281,8 +281,8 @@ func TestService_updateDNSRecord(t *testing.T) {
 			}
 
 			if !tt.expectError && len(capturedParams) == 4 {
-				if capturedParams[0] != config.HostedZoneID {
-					t.Errorf("expected hosted zone ID %q, got %q", config.HostedZoneID, capturedParams[0])
+				if capturedParams[0] != config.Zone {
+					t.Errorf("expected zone %q, got %q", config.Zone, capturedParams[0])
 				}
 				if capturedParams[1] != config.RecordName {
 					t.Errorf("expected record name %q, got %q", config.RecordName, capturedParams[1])
@@ -291,7 +291,7 @@ func TestService_updateDNSRecord(t *testing.T) {
 					t.Errorf("expected IP %q, got %q", tt.ip, capturedParams[2])
 				}
 				if capturedParams[3] != config.TTL {
-					t.Errorf("expected TTL %d, got %d", config.TTL, capturedParams[3])
+					t.Errorf("expected TTL %v, got %v", config.TTL, capturedParams[3])
 				}
 			}
 		})
@@ -345,19 +345,19 @@ func TestService_storeIP(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	mockRoute53 := &mockRoute53Client{}
+	mockDNS := &mockDNSProvider{}
 	mockIP := &mockIPClient{}
 	mockStore := &mockStorage{}
-	config := Config{HostedZoneID: "Z123", RecordName: "test.com", TTL: 60}
+	config := Config{Zone: "example.com", RecordName: "test", TTL: 60 * time.Second}
 	interval := time.Minute
 
-	service := New(mockRoute53, mockIP, mockStore, config, interval)
+	service := New(mockDNS, mockIP, mockStore, config, interval)
 
 	if service == nil {
 		t.Fatal("expected non-nil service")
 	}
-	if service.route53Client != mockRoute53 {
-		t.Error("route53 client not properly set")
+	if service.dnsProvider != mockDNS {
+		t.Error("DNS provider not properly set")
 	}
 	if service.ipClient != mockIP {
 		t.Error("IP client not properly set")
