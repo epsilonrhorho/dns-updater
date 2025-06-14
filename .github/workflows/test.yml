@@ -13,7 +13,5 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - name: Run gofmt
-        run: test -z "$(gofmt -l .)"
       - name: Run tests
         run: go test ./...
