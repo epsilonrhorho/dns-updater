@@ -1,0 +1,40 @@
+[Unit]
+Description=DNS Updater Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dns-updater
+Group=dns-updater
+ExecStart=/usr/local/bin/dns-updater
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+# Environment variables
+Environment=DNS_PROVIDER=route53
+Environment=ZONE=example.com
+Environment=RECORD_NAME=home
+Environment=STORAGE_PATH=/var/lib/dns-updater/last-ip
+Environment=UPDATE_INTERVAL=2m
+Environment=TTL=60s
+
+# AWS Route53 credentials (uncomment and set if using Route53)
+#Environment=AWS_ACCESS_KEY_ID=your-access-key-id
+#Environment=AWS_SECRET_ACCESS_KEY=your-secret-access-key
+#Environment=AWS_REGION=us-east-1
+
+# Cloudflare credentials (uncomment and set if using Cloudflare)
+#Environment=CF_API_TOKEN=your-api-token
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/dns-updater
+
+[Install]
+WantedBy=multi-user.target
