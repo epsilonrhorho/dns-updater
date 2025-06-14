@@ -30,6 +30,9 @@ go.work.sum
 # Scripts with secrets
 update.sh
 
+# Built binary
+dns-updater
+
 # Editor/IDE
 # .idea/
 # .vscode/
