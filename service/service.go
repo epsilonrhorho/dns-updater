@@ -6,41 +6,41 @@ import (
 	"os"
 	"time"
 
+	"github.com/epsilonrhorho/dns-updater/dns"
 	"github.com/epsilonrhorho/dns-updater/ipify"
-	"github.com/epsilonrhorho/dns-updater/route53"
 	"github.com/epsilonrhorho/dns-updater/storage"
 )
 
 // Config holds the configuration for the DNS updater service.
 type Config struct {
-	HostedZoneID string
-	RecordName   string
-	TTL          int64
+	Zone       string
+	RecordName string
+	TTL        time.Duration
 }
 
 // Service handles DNS updates with dependency injection.
 type Service struct {
-	route53Client route53.Interface
-	ipClient      ipify.ClientInterface
-	storage       storage.Interface
-	config        Config
-	interval      time.Duration
+	dnsProvider dns.Provider
+	ipClient    ipify.ClientInterface
+	storage     storage.Interface
+	config      Config
+	interval    time.Duration
 }
 
 // New creates a new Service instance.
 func New(
-	route53Client route53.Interface,
+	dnsProvider dns.Provider,
 	ipClient ipify.ClientInterface,
 	storage storage.Interface,
 	config Config,
 	interval time.Duration,
 ) *Service {
 	return &Service{
-		route53Client: route53Client,
-		ipClient:      ipClient,
-		storage:       storage,
-		config:        config,
-		interval:      interval,
+		dnsProvider: dnsProvider,
+		ipClient:    ipClient,
+		storage:     storage,
+		config:      config,
+		interval:    interval,
 	}
 }
 
@@ -61,9 +61,9 @@ func (s *Service) hasIPChanged(currentIP string) (bool, error) {
 	return lastIP != currentIP, nil
 }
 
-// updateDNSRecord updates the Route53 A record with the new IP.
+// updateDNSRecord updates the DNS A record with the new IP.
 func (s *Service) updateDNSRecord(ctx context.Context, ip string) error {
-	return s.route53Client.UpdateARecord(ctx, s.config.HostedZoneID, s.config.RecordName, ip, s.config.TTL)
+	return s.dnsProvider.UpdateARecord(ctx, s.config.Zone, s.config.RecordName, ip, s.config.TTL)
 }
 
 // storeIP persists the IP address to storage.
@@ -85,7 +85,7 @@ func (s *Service) Update(ctx context.Context) error {
 	}
 
 	if !changed {
-		log.Println("IP unchanged; skipping Route53 update")
+		log.Println("IP unchanged; skipping DNS update")
 		return nil
 	}
 
@@ -97,7 +97,7 @@ func (s *Service) Update(ctx context.Context) error {
 		return err
 	}
 
-	log.Println("Route53 A record updated")
+	log.Println("DNS A record updated")
 	return nil
 }
 

@@ -3,15 +3,16 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 )
 
-type mockRoute53Client struct {
-	updateARecordFunc func(ctx context.Context, hostedZoneID, recordName, ip string, ttl int64) error
+type mockDNSProvider struct {
+	updateARecordFunc func(ctx context.Context, zone, name, ip string, ttl time.Duration) error
 }
 
-func (m *mockRoute53Client) UpdateARecord(ctx context.Context, hostedZoneID, recordName, ip string, ttl int64) error {
+func (m *mockDNSProvider) UpdateARecord(ctx context.Context, zone, name, ip string, ttl time.Duration) error {
 	if m.updateARecordFunc != nil {
-		return m.updateARecordFunc(ctx, hostedZoneID, recordName, ip, ttl)
+		return m.updateARecordFunc(ctx, zone, name, ip, ttl)
 	}
 	return nil
 }
@@ -47,7 +48,7 @@ func (m *mockStorage) WriteIP(ip string) error {
 }
 
 var (
-	errRoute53   = errors.New("route53 error")
-	errIP        = errors.New("ip client error")
-	errStorage   = errors.New("storage error")
+	errDNS     = errors.New("dns provider error")
+	errIP      = errors.New("ip client error")
+	errStorage = errors.New("storage error")
 )

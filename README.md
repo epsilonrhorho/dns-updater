@@ -1,17 +1,30 @@
 # dns-updater
 
-`dns-updater` retrieves the machine's public IP address and updates a Route53 A record. The specific record to update is supplied via an environment variable so the program can be used for any host name.
+`dns-updater` retrieves the machine's public IP address and updates a DNS A record. It supports multiple DNS providers including AWS Route53 and Cloudflare.
 
 ## Required environment variables
 
-- `HOSTED_ZONE_ID` – the ID of the Route53 hosted zone containing the record.
-- `RECORD_NAME` – the fully qualified DNS record name to update.
-- `AWS_ACCESS_KEY_ID` – your AWS access key ID used to authenticate with Route53.
-- `AWS_SECRET_ACCESS_KEY` – your AWS secret access key.
-- `AWS_REGION` – the AWS region to use when signing requests.
-- `STORAGE_PATH` – path to persist the last seen IP address between runs.
+### General Configuration
+- `DNS_PROVIDER` – the DNS provider to use (`route53` or `cloudflare`)
+- `ZONE` – the DNS zone name (e.g., `example.com`)
+- `RECORD_NAME` – the DNS record name to update (e.g., `home` for `home.example.com`)
+- `STORAGE_PATH` – path to persist the last seen IP address between runs
 
-## IAM policy requirements
+### Optional Configuration
+- `UPDATE_INTERVAL` – how often to check for IP changes (default: `2m`)
+- `TTL` – DNS record TTL (default: `60s`)
+
+### AWS Route53 Configuration (when `DNS_PROVIDER=route53`)
+- `AWS_ACCESS_KEY_ID` – your AWS access key ID
+- `AWS_SECRET_ACCESS_KEY` – your AWS secret access key
+- `AWS_REGION` – the AWS region to use
+
+### Cloudflare Configuration (when `DNS_PROVIDER=cloudflare`)
+- `CF_API_TOKEN` – Cloudflare API token with Zone:Edit permissions
+
+## Provider-specific setup
+
+### AWS Route53 IAM policy requirements
 
 The AWS credentials used must permit `ChangeResourceRecordSets` on the hosted zone. Below is an example policy you can attach to the user or role executing this program:
 
@@ -23,26 +36,50 @@ The AWS credentials used must permit `ChangeResourceRecordSets` on the hosted zo
       "Effect": "Allow",
       "Action": [
         "route53:ChangeResourceRecordSets",
-        "route53:GetHostedZone"
+        "route53:GetHostedZone",
+        "route53:ListResourceRecordSets"
       ],
-      "Resource": "arn:aws:route53:::hostedzone/<HOSTED_ZONE_ID>"
+      "Resource": "arn:aws:route53:::hostedzone/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "route53:ListHostedZones"
+      ],
+      "Resource": "*"
     }
   ]
 }
 ```
 
-Replace `<HOSTED_ZONE_ID>` with your zone ID. The user or role must also have permission to retrieve changes if desired, e.g. `route53:GetChange`.
+### Cloudflare API token setup
+
+For Cloudflare, create an API token with the following permissions:
+- Zone:Edit permissions for the specific zone
+- Zone:Read permissions for the specific zone
+
+The token should be scoped to only the zone(s) you want to update.
 
 ## Kubernetes deployment
 
 The manifests in `k8s/` run `dns-updater` continuously. The application now
 handles its own scheduling and updates the DNS record every two minutes.
-Create a secret containing your AWS credentials before applying them:
+
+### For AWS Route53:
+Create a secret containing your AWS credentials:
 
 ```bash
-kubectl create secret generic dns-updater-aws \
+kubectl create secret generic dns-updater-secret \
   --from-literal=AWS_ACCESS_KEY_ID=<your-key-id> \
   --from-literal=AWS_SECRET_ACCESS_KEY=<your-secret-key>
+```
+
+### For Cloudflare:
+Create a secret containing your Cloudflare credentials:
+
+```bash
+kubectl create secret generic dns-updater-secret \
+  --from-literal=CF_API_TOKEN=<your-api-token>
 ```
 
 Then create the PersistentVolumeClaim and Deployment:
@@ -52,5 +89,4 @@ kubectl apply -f k8s/pvc.yaml
 kubectl apply -f k8s/deployment.yaml
 ```
 
-Edit `k8s/deployment.yaml` to fill in your `HOSTED_ZONE_ID`, `RECORD_NAME` and
-`AWS_REGION` values and to use the image you have pushed to a registry.
+Edit `k8s/deployment.yaml` to fill in your `DNS_PROVIDER`, `ZONE`, `RECORD_NAME` and other required environment variables for your chosen provider.
