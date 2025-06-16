@@ -1,26 +1,61 @@
 # dns-updater
 
-`dns-updater` retrieves the machine's public IP address and updates a DNS A record. It supports multiple DNS providers including AWS Route53 and Cloudflare.
+`dns-updater` retrieves the machine's public IP address and updates DNS A records. It supports multiple DNS providers including AWS Route53 and Cloudflare, and can manage multiple hostnames simultaneously.
 
-## Required environment variables
+## Configuration
 
-### General Configuration
-- `DNS_PROVIDER` – the DNS provider to use (`route53` or `cloudflare`)
-- `ZONE` – the DNS zone name (e.g., `example.com`)
-- `RECORD_NAME` – the DNS record name to update (e.g., `home` for `home.example.com`)
-- `STORAGE_PATH` – path to persist the last seen IP address between runs
+The application now uses YAML configuration instead of environment variables to support multiple DNS records.
 
-### Optional Configuration
-- `UPDATE_INTERVAL` – how often to check for IP changes (default: `2m`)
-- `TTL` – DNS record TTL (default: `60s`)
+### Configuration File
 
-### AWS Route53 Configuration (when `DNS_PROVIDER=route53`)
-- `AWS_ACCESS_KEY_ID` – your AWS access key ID
-- `AWS_SECRET_ACCESS_KEY` – your AWS secret access key
-- `AWS_REGION` – the AWS region to use
+Create a `config.yaml` file or specify the path using the `CONFIG_PATH` environment variable:
 
-### Cloudflare Configuration (when `DNS_PROVIDER=cloudflare`)
-- `CF_API_TOKEN` – Cloudflare API token with Zone:Edit permissions
+```yaml
+update_interval: 2m
+storage_path: /tmp/dns-updater
+
+records:
+  foo.example.com:
+    provider: cloudflare
+    zone: example.com
+    ttl: 60s
+    cf_api_token: your_cloudflare_api_token_here
+    
+  bar.example.com:
+    provider: route53
+    zone: example.com
+    ttl: 300s
+    aws_access_key_id: your_aws_access_key_id
+    aws_secret_key: your_aws_secret_access_key
+    aws_region: us-east-1
+    
+  baz.subdomain.example.com:
+    provider: cloudflare
+    zone: subdomain.example.com
+    ttl: 120s
+    cf_email: your_email@example.com
+    cf_api_key: your_cloudflare_global_api_key
+```
+
+### Configuration Options
+
+**Global Settings:**
+- `update_interval` – how often to check for IP changes (default: `2m`)
+- `storage_path` – base directory to persist last seen IP addresses (default: `/tmp/dns-updater`)
+
+**Per-Record Settings:**
+- `provider` – DNS provider (`route53` or `cloudflare`)
+- `zone` – DNS zone name (e.g., `example.com`)
+- `ttl` – DNS record TTL (default: `60s`)
+
+**AWS Route53 Settings:**
+- `aws_access_key_id` – AWS access key ID
+- `aws_secret_key` – AWS secret access key  
+- `aws_region` – AWS region
+
+**Cloudflare Settings:**
+- `cf_api_token` – Cloudflare API token (recommended)
+- `cf_email` + `cf_api_key` – Legacy authentication method
 
 ## Provider-specific setup
 
@@ -62,34 +97,30 @@ The token should be scoped to only the zone(s) you want to update.
 
 ## Kubernetes deployment
 
-The manifests in `k8s/` run `dns-updater` continuously. The application now
-handles its own scheduling and updates the DNS record every two minutes.
+The manifests in `k8s/` run `dns-updater` continuously. You'll need to create a ConfigMap with your YAML configuration.
 
-### For AWS Route53:
-Create a secret containing your AWS credentials:
-
+### Create configuration:
 ```bash
-kubectl create secret generic dns-updater-secret \
-  --from-literal=AWS_ACCESS_KEY_ID=<your-key-id> \
-  --from-literal=AWS_SECRET_ACCESS_KEY=<your-secret-key>
+kubectl create configmap dns-updater-config --from-file=config.yaml
 ```
 
-### For Cloudflare:
-Create a secret containing your Cloudflare credentials:
+### Create secrets for sensitive data:
+Instead of putting credentials directly in the YAML file, you can use Kubernetes secrets and reference them in your configuration:
 
 ```bash
-kubectl create secret generic dns-updater-secret \
-  --from-literal=CF_API_TOKEN=<your-api-token>
+kubectl create secret generic dns-updater-secrets \
+  --from-literal=cf-api-token=<your-cloudflare-token> \
+  --from-literal=aws-access-key-id=<your-aws-key> \
+  --from-literal=aws-secret-key=<your-aws-secret>
 ```
 
-Then create the PersistentVolumeClaim and Deployment:
-
+### Deploy:
 ```bash
 kubectl apply -f k8s/pvc.yaml
 kubectl apply -f k8s/deployment.yaml
 ```
 
-Edit `k8s/deployment.yaml` to fill in your `DNS_PROVIDER`, `ZONE`, `RECORD_NAME` and other required environment variables for your chosen provider.
+Note: You'll need to update the Kubernetes manifests to mount the ConfigMap and use the new YAML configuration format.
 
 ## Systemd service deployment
 
@@ -107,53 +138,45 @@ For running `dns-updater` as a systemd service on Linux:
    sudo useradd --system --no-create-home --shell /bin/false dns-updater
    ```
 
-3. **Create the storage directory:**
+3. **Create the configuration and storage directories:**
    ```bash
-   sudo mkdir -p /var/lib/dns-updater
+   sudo mkdir -p /etc/dns-updater /var/lib/dns-updater
    sudo chown dns-updater:dns-updater /var/lib/dns-updater
    ```
 
-4. **Install the service file:**
+4. **Create your configuration file:**
+   ```bash
+   sudo cp config.yaml.example /etc/dns-updater/config.yaml
+   sudo chown dns-updater:dns-updater /etc/dns-updater/config.yaml
+   sudo chmod 600 /etc/dns-updater/config.yaml
+   ```
+   
+   Edit `/etc/dns-updater/config.yaml` with your DNS records and credentials.
+
+5. **Install the service file:**
    ```bash
    sudo cp dns-updater.service /etc/systemd/system/
    ```
 
-5. **Edit the service file with your configuration:**
+6. **Update the service file to use the configuration file:**
    ```bash
    sudo systemctl edit dns-updater.service
    ```
    
-   Add your configuration in the override file:
-   
-   **DNS Settings (required for all providers):**
+   Add the configuration path:
    ```ini
    [Service]
-   Environment=ZONE=yourdomain.com
-   Environment=RECORD_NAME=home
-   ```
-   
-   **AWS Route53 Settings:**
-   ```ini
-   Environment=DNS_PROVIDER=route53
-   Environment=AWS_ACCESS_KEY_ID=your-access-key-id
-   Environment=AWS_SECRET_ACCESS_KEY=your-secret-access-key
-   Environment=AWS_REGION=us-east-1
-   ```
-   
-   **Cloudflare Settings:**
-   ```ini
-   Environment=DNS_PROVIDER=cloudflare
-   Environment=CF_API_TOKEN=your-api-token
+   Environment=CONFIG_PATH=/etc/dns-updater/config.yaml
    ```
 
-6. **Enable and start the service:**
+7. **Enable and start the service:**
    ```bash
    sudo systemctl daemon-reload
    sudo systemctl enable dns-updater.service
    sudo systemctl start dns-updater.service
    ```
 
-7. **Check the service status:**
+8. **Check the service status:**
    ```bash
    sudo systemctl status dns-updater.service
    sudo journalctl -u dns-updater.service -f

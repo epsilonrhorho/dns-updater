@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
+	"gopkg.in/yaml.v3"
 
 	"github.com/epsilonrhorho/dns-updater/dns"
 	"github.com/epsilonrhorho/dns-updater/ipify"
@@ -16,66 +18,109 @@ import (
 	"github.com/epsilonrhorho/dns-updater/storage"
 )
 
+type RecordConfig struct {
+	Provider         string        `yaml:"provider"`
+	Zone             string        `yaml:"zone,omitempty"`
+	TTL              time.Duration `yaml:"ttl,omitempty"`
+	AWSAccessKeyID   string        `yaml:"aws_access_key_id,omitempty"`
+	AWSSecretKey     string        `yaml:"aws_secret_key,omitempty"`
+	AWSRegion        string        `yaml:"aws_region,omitempty"`
+	CFAPIToken       string        `yaml:"cf_api_token,omitempty"`
+	CFEmail          string        `yaml:"cf_email,omitempty"`
+	CFAPIKey         string        `yaml:"cf_api_key,omitempty"`
+}
+
 type Config struct {
-	// General settings
-	DNSProvider    string        `envconfig:"DNS_PROVIDER" required:"true"`
-	Zone           string        `envconfig:"ZONE" required:"true"`
-	RecordName     string        `envconfig:"RECORD_NAME" required:"true"`
-	StoragePath    string        `envconfig:"STORAGE_PATH" required:"true"`
-	UpdateInterval time.Duration `envconfig:"UPDATE_INTERVAL" default:"2m"`
-	TTL            time.Duration `envconfig:"TTL" default:"60s"`
-	
-	// AWS Route53 settings (prefixed with AWS_)
-	AWSAccessKeyID     string `envconfig:"AWS_ACCESS_KEY_ID"`
-	AWSSecretAccessKey string `envconfig:"AWS_SECRET_ACCESS_KEY"`
-	AWSRegion          string `envconfig:"AWS_REGION"`
-	
-	// Cloudflare settings (prefixed with CF_)
-	CFAPIToken string `envconfig:"CF_API_TOKEN"`
-	CFEmail    string `envconfig:"CF_EMAIL"`
-	CFAPIKey   string `envconfig:"CF_API_KEY"`
+	UpdateInterval time.Duration                `yaml:"update_interval"`
+	StoragePath    string                       `yaml:"storage_path"`
+	Records        map[string]RecordConfig      `yaml:"records"`
 }
 
 
-func main() {
-	var c Config
-	if err := envconfig.Process("", &c); err != nil {
-		log.Fatalf("failed to parse environment variables: %v", err)
-	}
-
-	// Create DNS provider configuration
-	dnsConfig := dns.Config{
-		Provider:           c.DNSProvider,
-		AWSAccessKeyID:     c.AWSAccessKeyID,
-		AWSSecretAccessKey: c.AWSSecretAccessKey,
-		AWSRegion:          c.AWSRegion,
-		CFAPIToken:         c.CFAPIToken,
-		CFEmail:            c.CFEmail,
-		CFAPIKey:           c.CFAPIKey,
-	}
-
-	// Create DNS provider
-	dnsProvider, err := dns.NewProvider(dnsConfig)
+func loadConfig(configPath string) (*Config, error) {
+	data, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		log.Fatalf("failed to create DNS provider: %v", err)
+		return nil, err
 	}
 
-	// Create other clients
+	var config Config
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+
+	if config.UpdateInterval == 0 {
+		config.UpdateInterval = 2 * time.Minute
+	}
+	if config.StoragePath == "" {
+		config.StoragePath = "/tmp/dns-updater"
+	}
+
+	for recordName, recordConfig := range config.Records {
+		if recordConfig.TTL == 0 {
+			rc := recordConfig
+			rc.TTL = 60 * time.Second
+			config.Records[recordName] = rc
+		}
+	}
+
+	return &config, nil
+}
+
+func main() {
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "config.yaml"
+	}
+
+	config, err := loadConfig(configPath)
+	if err != nil {
+		log.Fatalf("failed to load configuration: %v", err)
+	}
+
+	if len(config.Records) == 0 {
+		log.Fatal("no DNS records configured")
+	}
+
 	ipClient := ipify.NewClient(nil)
-	storageClient := storage.NewFileStorage(c.StoragePath)
-
-	// Create service configuration
-	serviceConfig := service.Config{
-		Zone:       c.Zone,
-		RecordName: c.RecordName,
-		TTL:        c.TTL,
-	}
-
-	// Create and run the service
-	dnsService := service.New(dnsProvider, ipClient, storageClient, serviceConfig, c.UpdateInterval)
-
+	
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	dnsService.Run(ctx)
+	var wg sync.WaitGroup
+	
+	for recordName, recordConfig := range config.Records {
+		wg.Add(1)
+		go func(name string, rConfig RecordConfig) {
+			defer wg.Done()
+			
+			dnsConfig := dns.Config{
+				Provider:           rConfig.Provider,
+				AWSAccessKeyID:     rConfig.AWSAccessKeyID,
+				AWSSecretAccessKey: rConfig.AWSSecretKey,
+				AWSRegion:          rConfig.AWSRegion,
+				CFAPIToken:         rConfig.CFAPIToken,
+				CFEmail:            rConfig.CFEmail,
+				CFAPIKey:           rConfig.CFAPIKey,
+			}
+
+			dnsProvider, err := dns.NewProvider(dnsConfig)
+			if err != nil {
+				log.Printf("failed to create DNS provider for %s: %v", name, err)
+				return
+			}
+
+			storageClient := storage.NewFileStorage(config.StoragePath + "/" + name)
+
+			serviceConfig := service.Config{
+				Zone:       rConfig.Zone,
+				RecordName: name,
+				TTL:        rConfig.TTL,
+			}
+
+			dnsService := service.New(dnsProvider, ipClient, storageClient, serviceConfig, config.UpdateInterval)
+			dnsService.Run(ctx)
+		}(recordName, recordConfig)
+	}
+
+	wg.Wait()
 }
