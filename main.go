@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -20,7 +22,6 @@ import (
 
 type RecordConfig struct {
 	Provider         string        `yaml:"provider"`
-	Zone             string        `yaml:"zone,omitempty"`
 	TTL              time.Duration `yaml:"ttl,omitempty"`
 	AWSAccessKeyID   string        `yaml:"aws_access_key_id,omitempty"`
 	AWSSecretKey     string        `yaml:"aws_secret_key,omitempty"`
@@ -34,6 +35,18 @@ type Config struct {
 	UpdateInterval time.Duration                `yaml:"update_interval"`
 	StoragePath    string                       `yaml:"storage_path"`
 	Records        map[string]RecordConfig      `yaml:"records"`
+}
+
+// extractZoneFromRecordName extracts the zone from a record name.
+// Assumes the hostname part is exactly one DNS label.
+// For example: "foo.example.com" -> "example.com"
+// Returns an error if the record name has fewer than 3 labels.
+func extractZoneFromRecordName(recordName string) (string, error) {
+	parts := strings.Split(recordName, ".")
+	if len(parts) < 3 {
+		return "", fmt.Errorf("record name '%s' must have at least 3 DNS labels (e.g., host.domain.tld)", recordName)
+	}
+	return strings.Join(parts[1:], "."), nil
 }
 
 
@@ -93,6 +106,12 @@ func main() {
 		go func(name string, rConfig RecordConfig) {
 			defer wg.Done()
 			
+			zone, err := extractZoneFromRecordName(name)
+			if err != nil {
+				log.Printf("invalid record name %s: %v", name, err)
+				return
+			}
+			
 			dnsConfig := dns.Config{
 				Provider:           rConfig.Provider,
 				AWSAccessKeyID:     rConfig.AWSAccessKeyID,
@@ -112,7 +131,7 @@ func main() {
 			storageClient := storage.NewFileStorage(config.StoragePath + "/" + name)
 
 			serviceConfig := service.Config{
-				Zone:       rConfig.Zone,
+				Zone:       zone,
 				RecordName: name,
 				TTL:        rConfig.TTL,
 			}
