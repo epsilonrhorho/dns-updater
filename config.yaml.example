@@ -4,13 +4,11 @@ storage_path: /tmp/dns-updater
 records:
   foo.example.com:
     provider: cloudflare
-    zone: example.com
     ttl: 60s
     cf_api_token: your_cloudflare_api_token_here
     
   bar.example.com:
     provider: route53
-    zone: example.com
     ttl: 300s
     aws_access_key_id: your_aws_access_key_id
     aws_secret_key: your_aws_secret_access_key
@@ -18,7 +16,6 @@ records:
     
   baz.subdomain.example.com:
     provider: cloudflare
-    zone: subdomain.example.com
     ttl: 120s
     cf_email: your_email@example.com
     cf_api_key: your_cloudflare_global_api_key
