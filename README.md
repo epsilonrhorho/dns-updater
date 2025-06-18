@@ -2,13 +2,22 @@
 
 `dns-updater` retrieves the machine's public IP address and updates DNS A records. It supports multiple DNS providers including AWS Route53 and Cloudflare, and can manage multiple hostnames simultaneously.
 
+## Usage
+
+```bash
+dns-updater [-c config_file]
+```
+
+**Options:**
+- `-c config_file` - Path to configuration file (default: `/usr/local/etc/dns-updater.yaml`)
+
 ## Configuration
 
 The application now uses YAML configuration instead of environment variables to support multiple DNS records.
 
 ### Configuration File
 
-Create a `config.yaml` file or specify the path using the `CONFIG_PATH` environment variable:
+Create a configuration file (default: `/usr/local/etc/dns-updater.yaml`) or specify a custom path using the `-c` flag:
 
 ```yaml
 update_interval: 2m
@@ -17,13 +26,11 @@ storage_path: /tmp/dns-updater
 records:
   foo.example.com:
     provider: cloudflare
-    zone: example.com
     ttl: 60s
     cf_api_token: your_cloudflare_api_token_here
     
   bar.example.com:
     provider: route53
-    zone: example.com
     ttl: 300s
     aws_access_key_id: your_aws_access_key_id
     aws_secret_key: your_aws_secret_access_key
@@ -31,7 +38,6 @@ records:
     
   baz.subdomain.example.com:
     provider: cloudflare
-    zone: subdomain.example.com
     ttl: 120s
     cf_email: your_email@example.com
     cf_api_key: your_cloudflare_global_api_key
@@ -45,8 +51,9 @@ records:
 
 **Per-Record Settings:**
 - `provider` – DNS provider (`route53` or `cloudflare`)
-- `zone` – DNS zone name (e.g., `example.com`)
 - `ttl` – DNS record TTL (default: `60s`)
+
+**Note:** The DNS zone is automatically extracted from the record name. For example, `foo.example.com` will use zone `example.com`. Record names must have at least 3 DNS labels (e.g., `host.domain.tld`).
 
 **AWS Route53 Settings:**
 - `aws_access_key_id` – AWS access key ID
@@ -151,7 +158,15 @@ For running `dns-updater` as a systemd service on Linux:
    sudo chmod 600 /etc/dns-updater/config.yaml
    ```
    
-   Edit `/etc/dns-updater/config.yaml` with your DNS records and credentials.
+   Or place it in the default location:
+   ```bash
+   sudo mkdir -p /usr/local/etc
+   sudo cp config.yaml.example /usr/local/etc/dns-updater.yaml
+   sudo chown dns-updater:dns-updater /usr/local/etc/dns-updater.yaml
+   sudo chmod 600 /usr/local/etc/dns-updater.yaml
+   ```
+   
+   Edit the configuration file with your DNS records and credentials.
 
 5. **Install the service file:**
    ```bash
@@ -163,10 +178,10 @@ For running `dns-updater` as a systemd service on Linux:
    sudo systemctl edit dns-updater.service
    ```
    
-   Add the configuration path:
+   Update the ExecStart line to specify the configuration file:
    ```ini
    [Service]
-   Environment=CONFIG_PATH=/etc/dns-updater/config.yaml
+   ExecStart=/usr/local/bin/dns-updater -c /usr/local/etc/dns-updater.yaml
    ```
 
 7. **Enable and start the service:**

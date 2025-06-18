@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -80,12 +81,10 @@ func loadConfig(configPath string) (*Config, error) {
 }
 
 func main() {
-	configPath := os.Getenv("CONFIG_PATH")
-	if configPath == "" {
-		configPath = "config.yaml"
-	}
+	configPath := flag.String("c", "/usr/local/etc/dns-updater.yaml", "path to configuration file")
+	flag.Parse()
 
-	config, err := loadConfig(configPath)
+	config, err := loadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
