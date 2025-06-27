@@ -1,0 +1,11 @@
+# Each non-empty line defines a record to manage.
+# Format: <record_name> <provider> <zone_id> <ttl> [credential]
+# Provider: cloudflare or route53
+# Credential: For cloudflare, API token. For route53, AWS profile name or '-' for default profile.
+# TTL is in seconds.
+
+# Example Cloudflare record
+foo.example.com cloudflare cf_zone_id_here 60 cf_api_token_here
+
+# Example Route53 record
+bar.example.com route53 r53_zone_id_here 300 default
