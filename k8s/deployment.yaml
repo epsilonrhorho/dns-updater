@@ -15,29 +15,21 @@ spec:
       containers:
       - name: dns-updater
         image: ghcr.io/epsilonrhorho/dns-updater:main
+        command: ["/usr/local/bin/dns-updater.sh", "/etc/dns-updater/config"]
         env:
-        - name: HOSTED_ZONE_ID
-          value: "<HOSTED_ZONE_ID>"
-        - name: RECORD_NAME
-          value: "<RECORD_NAME>"
+        - name: UPDATE_INTERVAL
+          value: "300"
         - name: STORAGE_PATH
-          value: /data/last_ip
-        - name: AWS_REGION
-          value: "<AWS_REGION>"
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: dns-updater-aws
-              key: AWS_ACCESS_KEY_ID
-        - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: dns-updater-aws
-              key: AWS_SECRET_ACCESS_KEY
+          value: /data
         volumeMounts:
-        - name: storage
+        - name: config
+          mountPath: /etc/dns-updater
+        - name: data
           mountPath: /data
       volumes:
-      - name: storage
+      - name: config
+        configMap:
+          name: dns-updater-config
+      - name: data
         persistentVolumeClaim:
           claimName: dns-updater-storage
